@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <script src="./libs/common.js"></script>
+    <script src="./libs/matter.min.js"></script>
+    <script src="./libs/matterjsRaycast.js"></script>
+    <script src="./libs/peer.js"></script>
+    <script src="libs/words.js"></script>
+
+    <link rel="icon" href="./assets/imgs/favicon.png">
+    <title id="title">PICO PARK</title>
+
+    <style>
+        @font-face {
+            font-family: squareforced;
+            src: local('FORCEDSQUARE'), url(./assets/FORCEDSQUARE.ttf) format('truetype');
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 10;
+            width: 100%;
+            padding: 40px;
+            background: transparent;
+            pointer-events: none;
+            max-height: 100vh;
+            overflow-y: auto;
+        }
+        
+        .overlay > * {
+            pointer-events: auto;
+        }
+        
+        .ui-row {
+            display: flex;
+            align-items: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            margin-bottom: 40px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: fadeInUp 0.6s ease-out;
+            margin-bottom: 35px;
+        }
+        
+        .nav-card {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(20px);
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+        
+        .card:active {
+            transform: scale(0.98);
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .nav-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 50px;
+            margin-bottom: 0;
+            padding: 25px 40px;
+        }
+        
+        .nav-link {
+            color: #6b46c1;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            background: rgba(107, 70, 193, 0.1);
+            font-size: 14px;
+        }
+        
+        .nav-link:hover {
+            background: rgba(107, 70, 193, 0.2);
+            transform: translateY(-1px);
+        }
+        
+        .restart-link {
+            background: linear-gradient(135deg, #ff6b6b, #ff8e53);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+        }
+        
+        .restart-link:hover {
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+        }
+        
+        #levelInfo {
+            font-weight: 700;
+            color: #4c1d95;
+            font-size: 14px;
+            background: linear-gradient(135deg, #8b5cf6, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            padding: 6px 12px;
+            background: rgba(139, 92, 246, 0.1);
+            border-radius: 6px;
+            -webkit-background-clip: unset;
+            -webkit-text-fill-color: unset;
+            background-clip: unset;
+            color: #6b46c1;
+        }
+        
+        .sound-control-section {
+            display: flex;
+            align-items: center;
+            gap: 25px;
+        }
+        
+        .color-label {
+            font-weight: 600;
+            color: #374151;
+            font-size: 14px;
+        }
+        
+        .preset-colors {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .chip {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            cursor: pointer;
+            display: inline-block;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .chip:hover {
+            transform: scale(1.1);
+            border-color: #f59e0b;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+        }
+        
+        .chip.selected {
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+            transform: scale(1.05);
+        }
+        
+        .chip::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: all 0.3s ease;
+        }
+        
+        .chip:hover::after {
+            width: 12px;
+            height: 12px;
+        }
+        
+        .custom-color-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        
+        #customColorPicker {
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        #customColorPicker:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #8b5cf6, #a855f7);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+            font-size: 14px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+        }
+        
+        .btn:active {
+            transform: scale(0.95);
+        }
+        
+        .btn-orange {
+            background: linear-gradient(135deg, #f59e0b, #f97316);
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+        }
+        
+        .btn-orange:hover {
+            box-shadow: 0 8px 25px rgba(245, 158, 11, 0.4);
+        }
+        
+        .menu-card {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+        
+        .game-details {
+            background: linear-gradient(135deg, #8b5cf6, #a855f7);
+            color: white;
+            padding: 40px;
+            border-radius: 20px;
+            margin-bottom: 50px;
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .game-code {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+        
+        .copy-link {
+            color: #fbbf24;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-size: 16px;
+        }
+        
+        .copy-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+        
+        .member-list {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+        }
+        
+        .member-list h2 {
+            margin: 0 0 35px 0;
+            color: #374151;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        
+        .member-item {
+            padding: 22px 28px;
+            margin-bottom: 20px;
+            background: rgba(139, 92, 246, 0.1);
+            border-radius: 16px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .member-item:hover {
+            background: rgba(139, 92, 246, 0.2);
+            border-color: #8b5cf6;
+            transform: translateX(5px);
+        }
+        
+        .member-item.host {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(249, 115, 22, 0.2));
+            border-color: #f59e0b;
+        }
+        
+        .member-item.host::before {
+            content: '房主';
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            background: linear-gradient(135deg, #f59e0b, #f97316);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 35px;
+        }
+        
+        .btn-full {
+            width: 100%;
+            text-align: center;
+        }
+        
+        .waiting-message {
+            text-align: center;
+            color: #6b7280;
+            font-size: 18px;
+            font-weight: 600;
+            padding: 60px 40px;
+            background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+            border-radius: 20px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(139, 92, 246, 0.3);
+            border-radius: 50%;
+            border-top-color: #8b5cf6;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <script>
+        var url = location.href,
+            urlData = url.split("?").splice(-1,1)
+
+        data = {}
+        urlData.forEach((e)=>{
+            data[e.split("=")[0]] = e.split("=")[1]
+        })
+
+        urlData = data
+    </script>
+
+    <canvas id="c" style="display: none;"></canvas>
+    <div class="overlay">
+        <!-- Top Navigation and Sound Control Card -->
+        <div class="card nav-card">
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <a href="./index.html" class="nav-link">返回主页</a>
+                <a style="display: none;" id="restartLevel" href="#" class="nav-link restart-link" onClick="(function(){
+                    mainGame.levelHandler.setLevel(mainGame.levelHandler.currentLevel.name)
+                    return false;
+                })();return false;">重启关卡</a>
+                <span id="levelInfo"></span>
+            </div>
+            <div class="sound-control-section">
+                <span class="color-label">音效控制：</span>
+                <button id="soundToggle" class="btn">🔊 开启</button>
+                <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 120px;" />
+            </div>
+        </div>
+        
+        <!-- Game Details Card -->
+        <div id="hostGameDetails" style="display: none;">
+            <div class="card game-details">
+                <div class="game-code">
+                    <span class="spinner"></span>
+                    房间码: <b id="roomCode">获取中</b><span id="incoming"></span>
+                </div>
+                <a id="copyLink" href="#" class="copy-link" onclick="(function(){
+                    navigator.clipboard.writeText(`https://aeolus-1.github.io/picoParkClone/game.html?join=${hostConnection.joinConn.selfId}`);
+                    return false;
+                })();return false;">复制链接</a>
+            </div>
+        </div>
+        
+        <!-- Member List Card -->
+        <div id="hostMemberList" style="display: none;">
+            <div class="card member-list">
+                <h2>成员列表</h2>
+                <div id="memberlist"></div>
+                <div class="member-item host">主机</div>
+            </div>
+        </div>
+        
+        <!-- Action Buttons Card -->
+        <div id="hostActionButtons" style="display: none;">
+            <div class="card action-buttons">
+                <button class="btn btn-full" onClick="(function(){
+                    mainGame.playerhandler.addPlayer({
+                        controls:['a','d','w','s'],
+                        keys:keys,
+                        color:mainGame.fetchColor(),
+                    })
+                    addPlayerToMenu('玩家2')
+                    return false;
+                })();return false;">添加本地玩家</button>
+                
+                <button class="btn btn-full btn-orange" onClick="(function(){
+                    startGame()
+                    hostConnection.broadcast(JSON.stringify({
+                        startGame:true,
+                    }))
+                    return false;
+                })();return false;">开始游戏</button>
+            </div>
+        </div>
+        
+        <!-- Waiting Message Card (Client) -->
+        <div id="clientWaiting" style="display: none;">
+            <div class="card waiting-message">
+                <span class="spinner"></span>
+                等待主机开始游戏...
+            </div>
+        </div>
+    </div>
+    <script src="./src/multiplayer.js"></script>
+    <script src="./src/buttons.js"></script>
+    <script src="./src/door.js"></script>
+    <script src="./src/trigger.js"></script>
+    <script src="./src/blocks.js"></script>
+    <script src="./src/lasers.js"></script>
+    <script src="./src/jumppad.js"></script>
+
+    <script src="./src/levels.js"></script>
+    <script src="./src/level.js"></script>
+
+    <script src="./src/matterInit.js"></script>
+    <script src="./src/atlasSetup.js"></script>
+
+    <script src="src/syncController.js"></script>
+
+    <script src="./src/controls.js"></script>
+    <script src="./src/update.js"></script>
+
+    <script src="./src/player.js"></script>
+    <script src="./src/render.js"></script>
+
+    <script src="./src/entity.js"></script>
+    <script src="src/particles.js"></script>
+
+    <script src="./src/game.js"></script>
+
+    <script src="./src/constraints.js"></script>
+
+    <script src="./src/host.js"></script>
+    <script src="./src/client.js"></script>
+
+    <script src="./src/menu.js"></script>
+    <script src="./src/sound.js"></script>
+
+    <div id="menu">
+        <!-- Menu content moved to overlay -->
+    </div>
+
+    <script>
+        window.localfile = location.protocol=="file:"
+        function updateLevelInfo(){
+            const el = document.getElementById('levelInfo')
+            if (!el||!mainGame||!mainGame.levelHandler||!mainGame.levelHandler.currentLevel) return
+            el.textContent = `关卡：${mainGame.levelHandler.currentLevel.name||''}（玩家：${mainGame.players.length}）`
+        }
+        function initGame() {
+            window.mainGame = new Game()
+
+            var player1 = mainGame.playerhandler.addPlayer({
+            controls:["arrowleft","arrowright","arrowup","arrowdown"],
+            keys:keys,
+        }) 
+
+            window.hostConnection;window.clientConnection
+            if (urlData.host) {hostConnection = new Host(mainGame);hostConnection.init()}
+            if (urlData.join) {
+                clientConnection = new Client(mainGame,player1);clientConnection.init(urlData.join)
+                document.getElementById("restartLevel").style.display = "none"
+            }
+            if (!urlData.host&&!urlData.join) startGame()
+
+            // 移除颜色选择功能，使用默认颜色
+            
+            // setup sound controls
+            const soundToggle = document.getElementById('soundToggle')
+            const volumeSlider = document.getElementById('volumeSlider')
+            
+            soundToggle.onclick = () => {
+                const enabled = window.soundManager.toggle()
+                soundToggle.textContent = enabled ? '🔊 开启' : '🔇 关闭'
+                soundToggle.style.background = enabled ? 
+                    'linear-gradient(135deg, #8b5cf6, #a855f7)' : 
+                    'linear-gradient(135deg, #6b7280, #9ca3af)'
+            }
+            
+            volumeSlider.oninput = (e) => {
+                const volume = e.target.value / 100
+                window.soundManager.setVolume(volume)
+            }
+
+
+            setInterval(() => {
+                if (window.hostConnection) hostConnection.updateClients()
+                if (window.clientConnection) clientConnection.updateHost()
+
+            }, 10);
+
+            setInterval(() => {
+                mainGame.players.forEach((e)=>{if(!e.onlinePlayer) e.updateKeys(keys)})
+            }, 5);
+            setInterval(updateLevelInfo, 300)
+            
+        }
+        function startMainGame() {
+            mainGame.testInit()
+            mainGame.initRender()
+            // initial level info
+            setTimeout(()=>{try{updateLevelInfo()}catch(e){}}, 500)
+            
+            // Hide all cards except navigation when game starts
+            hideGameCards()
+        }
+        
+        function hideGameCards() {
+            const cardsToHide = [
+                'hostGameDetails',
+                'hostMemberList', 
+                'hostActionButtons',
+                'clientWaiting'
+            ]
+            cardsToHide.forEach(id => {
+                const element = document.getElementById(id)
+                if (element) {
+                    element.style.display = 'none'
+                }
+            })
+        }
+        
+        function showGameCards() {
+            // Show cards based on current mode
+            if (urlData.host) {
+                document.getElementById("hostGameDetails").style.display = ""
+                document.getElementById("hostMemberList").style.display = ""
+                document.getElementById("hostActionButtons").style.display = ""
+            } else if (urlData.join) {
+                document.getElementById("clientWaiting").style.display = ""
+            }
+        }
+
+       
+
+
+        window.onload=()=>{
+            _loadFont("squareforced")
+
+            if (urlData.host) {
+                document.getElementById("hostGameDetails").style.display = ""
+                document.getElementById("hostMemberList").style.display = ""
+                document.getElementById("hostActionButtons").style.display = ""
+            } else if (urlData.join) {
+                document.getElementById("clientWaiting").style.display = ""
+            }
+
+            initGame()
+
+            let tempLevel = localStorage.getItem("tempLevel")
+            console.log(tempLevel)
+            if (tempLevel != null) {
+                let levelString = `({${atob(tempLevel)}})`
+                document.getElementById("gameCode").innerHTML = "-- 临时关卡已加载 --"
+                document.getElementById("title").textContent = "临时关卡"
+                document.getElementById("copyLink").style.display = "none"
+                levels.tempLevel = eval(levelString)["tempName"]
+                mainGame.runTemp = true
+                localStorage.removeItem("tempLevel")
+                    
+            }
+        }
+        function setLevel(lvl) {
+    mainGame.renderer.levelTransistion(lvl)
+                            if (window.hostConnection) {
+                                hostConnection.broadcast(JSON.stringify({
+                                    setLevel:lvl,
+                                }))
+                            }
+}
+       
+    </script>
+
+</body>
+</html>
